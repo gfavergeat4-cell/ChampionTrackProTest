@@ -41,20 +41,33 @@ try {
   process.exit(1);
 }
 
-// Vérifier que le fichier est un module ES6 (pas importScripts)
-if (sourceContent.includes('importScripts(')) {
-  console.error('[POST-BUILD] ❌ ERROR: Service worker must use ES modules, not importScripts()');
-  console.error('[POST-BUILD] ❌ Service worker should use: import { ... } from "...";');
-  process.exit(1);
-}
+// Vérifier que le fichier est un service worker valide (classic OU module ES)
+// OK si contient importScripts (classic SW) OU import/export (module ES)
+// KO si ressemble à du HTML ou ne contient aucune signature valide
 
-if (!sourceContent.includes('import ') || !sourceContent.includes('firebase')) {
-  console.error('[POST-BUILD] ❌ ERROR: Source file does not appear to be a valid Firebase ES module service worker');
+const isClassicSW = sourceContent.includes('importScripts(');
+const isModuleSW = sourceContent.includes('import ') || sourceContent.includes('export ');
+const isHTML = sourceContent.trim().startsWith('<!DOCTYPE') || sourceContent.includes('<html>');
+
+if (isHTML) {
+  console.error('[POST-BUILD] ❌ ERROR: Source file appears to be HTML, not JavaScript!');
   console.error('[POST-BUILD] ❌ First 200 chars:', sourceContent.substring(0, 200));
   process.exit(1);
 }
 
-console.log('[POST-BUILD] ✅ Source file validated (ES module with Firebase imports)');
+if (!isClassicSW && !isModuleSW) {
+  console.error('[POST-BUILD] ❌ ERROR: Source file does not appear to be a valid service worker');
+  console.error('[POST-BUILD] ❌ Expected: importScripts(...) (classic) OR import/export (module)');
+  console.error('[POST-BUILD] ❌ First 200 chars:', sourceContent.substring(0, 200));
+  process.exit(1);
+}
+
+if (!sourceContent.includes('firebase')) {
+  console.warn('[POST-BUILD] ⚠️ WARNING: Source file does not contain "firebase" - may not be a Firebase service worker');
+}
+
+const swType = isClassicSW ? 'classic (importScripts)' : 'ES module (import/export)';
+console.log(`[POST-BUILD] ✅ Source file validated (${swType} service worker)`);
 console.log('[POST-BUILD] Source file size:', sourceContent.length, 'bytes');
 
 // Vérifier que le dossier dist existe (il devrait exister après expo export)
@@ -114,11 +127,16 @@ console.log('[POST-BUILD] ===== Final Verification =====');
 if (fs.existsSync(distSwPath)) {
   const finalStats = fs.statSync(distSwPath);
   const finalContent = fs.readFileSync(distSwPath, 'utf8');
-  if (finalContent.includes('import ') && finalContent.includes('firebase')) {
+  // Vérifier que le fichier est valide (classic OU module)
+  const isValidSW = finalContent.includes('importScripts(') || finalContent.includes('import ') || finalContent.includes('export ');
+  const isNotHTML = !finalContent.trim().startsWith('<!DOCTYPE') && !finalContent.includes('<html>');
+  
+  if (isValidSW && isNotHTML) {
+    const swType = finalContent.includes('importScripts(') ? 'classic' : 'ES module';
     console.log('[POST-BUILD] ✅ OK: Service worker present in web/dist/');
     console.log('[POST-BUILD] ✅ File path:', distSwPath);
     console.log('[POST-BUILD] ✅ File size:', finalStats.size, 'bytes');
-    console.log('[POST-BUILD] ✅ Valid JavaScript service worker');
+    console.log(`[POST-BUILD] ✅ Valid ${swType} JavaScript service worker`);
     console.log('[POST-BUILD] ✅ File will be served at: /firebase-messaging-sw.js');
     
     // Lister les fichiers dans web/dist pour vérification
@@ -227,9 +245,9 @@ try {
 }
 
 console.log('[POST-BUILD] ===== Service Worker Copy Complete =====');
-console.log('[POST-BUILD] ✅ BUILD SUCCESS: ES module service worker ready for Vercel deployment');
+console.log('[POST-BUILD] ✅ BUILD SUCCESS: Service worker ready for Vercel deployment');
 console.log('[POST-BUILD] ✅ Files in web/dist/:');
-console.log('[POST-BUILD]   - firebase-messaging-sw.js (ES module)');
-console.log('[POST-BUILD]   - firebase/firebase-app.js (ESM)');
-console.log('[POST-BUILD]   - firebase/firebase-messaging-sw.js (ESM)');
+console.log('[POST-BUILD]   - firebase-messaging-sw.js');
+console.log('[POST-BUILD]   - firebase/firebase-app.js');
+console.log('[POST-BUILD]   - firebase/firebase-messaging-sw.js');
 

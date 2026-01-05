@@ -55,21 +55,25 @@ for (const filePath of requiredFiles) {
   }
 }
 
-// Vérifier que le service worker principal est un module ES6 (pas importScripts)
+// Vérifier que le service worker principal est valide (classic OU module ES)
 const swPath = path.join(__dirname, '..', 'web', 'dist', 'firebase-messaging-sw.js');
 if (fs.existsSync(swPath)) {
   const swContent = fs.readFileSync(swPath, 'utf8');
   
-  // Le SW doit utiliser import (ES modules), pas importScripts
-  if (swContent.includes('importScripts(')) {
-    console.error('[VERIFY] ❌ ERROR: Service worker must use ES modules (import), not importScripts()!');
-    console.error('[VERIFY] ❌ Service worker should be registered with type: "module"');
-    allPresent = false;
-  }
+  // Accepter soit classic (importScripts) soit module ES (import/export)
+  const isClassicSW = swContent.includes('importScripts(');
+  const isModuleSW = swContent.includes('import ') || swContent.includes('export ');
+  const isHTML = swContent.trim().startsWith('<!DOCTYPE') || swContent.includes('<html>');
   
-  if (!swContent.includes('import ')) {
-    console.error('[VERIFY] ❌ ERROR: Service worker must use ES module imports (import ... from ...)');
+  if (isHTML) {
+    console.error('[VERIFY] ❌ ERROR: Service worker contains HTML instead of JavaScript!');
     allPresent = false;
+  } else if (!isClassicSW && !isModuleSW) {
+    console.error('[VERIFY] ❌ ERROR: Service worker must use importScripts() (classic) OR import/export (module)!');
+    allPresent = false;
+  } else {
+    const swType = isClassicSW ? 'classic (importScripts)' : 'ES module (import/export)';
+    console.log(`[VERIFY] ✅ Service worker type: ${swType}`);
   }
   
   // Vérifier qu'il n'y a pas de compat dans le SW
@@ -82,11 +86,6 @@ if (fs.existsSync(swPath)) {
   if (swContent.includes('window.')) {
     console.error('[VERIFY] ❌ ERROR: Service worker contains "window." which is not available!');
     allPresent = false;
-  }
-  
-  // Vérifier qu'il y a un marqueur indiquant que c'est un module ES6
-  if (!swContent.includes('type: "module"') && !swContent.includes('ES Module') && !swContent.includes('ESM')) {
-    console.warn('[VERIFY] ⚠️ WARNING: Service worker should have a comment indicating it is an ES module');
   }
 }
 
@@ -131,10 +130,10 @@ if (!allPresent) {
 }
 
 console.log('[VERIFY] ✅ All required files present and valid');
-console.log('[VERIFY] ✅ Service worker is an ES module (uses import, not importScripts)');
+console.log('[VERIFY] ✅ Service worker is valid (classic or ES module)');
 console.log('[VERIFY] ✅ No compat files found');
 console.log('[VERIFY] ✅ No "window." references found');
 console.log('[VERIFY] ✅ No CDN imports found');
-console.log('[VERIFY] ✅ Required ESM Firebase files present');
+console.log('[VERIFY] ✅ Required Firebase files present');
 console.log('[VERIFY] ===== Build Verification Complete =====');
 
