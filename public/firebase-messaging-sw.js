@@ -1,20 +1,17 @@
 ﻿/* public/firebase-messaging-sw.js */
-/* Service Worker for Firebase Cloud Messaging - Classic Script */
+/* Service Worker for Firebase Cloud Messaging - ES Module */
+/* This file is registered with type: "module" */
 
-// Charger les scripts Firebase compat (exposent un objet global firebase)
-// IMPORTANT: Utiliser importScripts() pour charger les scripts classiques
-// Les fichiers compat exposent firebase via self (pas window)
+// Importer les modules Firebase ESM (non-compat, SW-compatible)
+// IMPORTANT: Utiliser les imports ES6, pas importScripts()
+// Les fichiers ESM Firebase n'utilisent pas window
 
-console.log('[SW] Loading Firebase Service Worker scripts...');
+console.log('[SW] Loading Firebase Service Worker modules...');
 
-try {
-  importScripts('/firebase/firebase-app-compat.js');
-  importScripts('/firebase/firebase-messaging-compat.js');
-  console.log('[SW] ✅ Firebase Service Worker scripts loaded successfully');
-} catch (error) {
-  console.error('[SW] ❌ CRITICAL: Failed to load Firebase Service Worker scripts:', error);
-  throw new Error('ServiceWorker script evaluation failed: Cannot load Firebase scripts - ' + error.message);
-}
+import { initializeApp } from '/firebase/firebase-app.js';
+import { getMessaging, onBackgroundMessage } from '/firebase/firebase-messaging-sw.js';
+
+console.log('[SW] ✅ Firebase Service Worker modules imported successfully');
 
 // Configuration Firebase (doit correspondre à celle de l'app)
 const firebaseConfig = {
@@ -26,16 +23,16 @@ const firebaseConfig = {
   appId: '1:308674968497:web:5f8d10b09ee98717a81b90',
 };
 
-// Initialiser Firebase (utilise l'objet global firebase exposé par les scripts compat)
-firebase.initializeApp(firebaseConfig);
+// Initialiser Firebase
+const app = initializeApp(firebaseConfig);
 console.log('[SW] ✅ Firebase App initialized');
 
 // Obtenir l'instance messaging
-const messaging = firebase.messaging();
+const messaging = getMessaging(app);
 console.log('[SW] ✅ Firebase Messaging instance created');
 
 // Gérer les messages en background
-messaging.onBackgroundMessage((payload) => {
+onBackgroundMessage(messaging, (payload) => {
   console.log('[SW] Received background message:', payload);
 
   const notificationTitle = payload.notification?.title || payload.data?.title || 'New session available';

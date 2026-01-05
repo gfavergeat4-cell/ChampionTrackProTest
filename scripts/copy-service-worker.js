@@ -41,13 +41,20 @@ try {
   process.exit(1);
 }
 
-if (!sourceContent.includes('importScripts') || !sourceContent.includes('firebase')) {
-  console.error('[POST-BUILD] ❌ ERROR: Source file does not appear to be a valid Firebase service worker');
+// Vérifier que le fichier est un module ES6 (pas importScripts)
+if (sourceContent.includes('importScripts(')) {
+  console.error('[POST-BUILD] ❌ ERROR: Service worker must use ES modules, not importScripts()');
+  console.error('[POST-BUILD] ❌ Service worker should use: import { ... } from "...";');
+  process.exit(1);
+}
+
+if (!sourceContent.includes('import ') || !sourceContent.includes('firebase')) {
+  console.error('[POST-BUILD] ❌ ERROR: Source file does not appear to be a valid Firebase ES module service worker');
   console.error('[POST-BUILD] ❌ First 200 chars:', sourceContent.substring(0, 200));
   process.exit(1);
 }
 
-console.log('[POST-BUILD] ✅ Source file validated (contains importScripts and firebase)');
+console.log('[POST-BUILD] ✅ Source file validated (ES module with Firebase imports)');
 console.log('[POST-BUILD] Source file size:', sourceContent.length, 'bytes');
 
 // Vérifier que le dossier dist existe (il devrait exister après expo export)
@@ -107,7 +114,7 @@ console.log('[POST-BUILD] ===== Final Verification =====');
 if (fs.existsSync(distSwPath)) {
   const finalStats = fs.statSync(distSwPath);
   const finalContent = fs.readFileSync(distSwPath, 'utf8');
-  if ((finalContent.includes('import') || finalContent.includes('importScripts')) && finalContent.includes('firebase')) {
+  if (finalContent.includes('import ') && finalContent.includes('firebase')) {
     console.log('[POST-BUILD] ✅ OK: Service worker present in web/dist/');
     console.log('[POST-BUILD] ✅ File path:', distSwPath);
     console.log('[POST-BUILD] ✅ File size:', finalStats.size, 'bytes');
@@ -142,21 +149,23 @@ console.log('[POST-BUILD] Destination directory:', distFirebaseDir);
 if (!fs.existsSync(publicFirebaseDir)) {
   console.error('[POST-BUILD] ❌ ERROR: Firebase directory not found:', publicFirebaseDir);
   console.error('[POST-BUILD] ❌ This directory is required for service worker to work in production.');
-  console.error('[POST-BUILD] ❌ Make sure public/firebase/ exists with firebase-app-compat.js and firebase-messaging-compat.js');
+  console.error('[POST-BUILD] ❌ Make sure public/firebase/ exists with firebase-app.js and firebase-messaging-sw.js (ESM modules)');
   process.exit(1);
 }
 
-// Vérifier que les fichiers Firebase compat existent
-const firebaseAppCompatPath = path.join(publicFirebaseDir, 'firebase-app-compat.js');
-const firebaseMessagingCompatPath = path.join(publicFirebaseDir, 'firebase-messaging-compat.js');
+// Vérifier que les fichiers Firebase ESM existent (non-compat)
+const firebaseAppPath = path.join(publicFirebaseDir, 'firebase-app.js');
+const firebaseMessagingSwPath = path.join(publicFirebaseDir, 'firebase-messaging-sw.js');
 
-if (!fs.existsSync(firebaseAppCompatPath)) {
-  console.error('[POST-BUILD] ❌ ERROR: firebase-app-compat.js not found:', firebaseAppCompatPath);
+if (!fs.existsSync(firebaseAppPath)) {
+  console.error('[POST-BUILD] ❌ ERROR: firebase-app.js (ESM) not found:', firebaseAppPath);
+  console.error('[POST-BUILD] ❌ This file is required for ES module service worker');
   process.exit(1);
 }
 
-if (!fs.existsSync(firebaseMessagingCompatPath)) {
-  console.error('[POST-BUILD] ❌ ERROR: firebase-messaging-compat.js not found:', firebaseMessagingCompatPath);
+if (!fs.existsSync(firebaseMessagingSwPath)) {
+  console.error('[POST-BUILD] ❌ ERROR: firebase-messaging-sw.js (ESM) not found:', firebaseMessagingSwPath);
+  console.error('[POST-BUILD] ❌ This file is required for ES module service worker');
   process.exit(1);
 }
 
@@ -168,15 +177,15 @@ if (!fs.existsSync(distFirebaseDir)) {
   console.log('[POST-BUILD] ✅ Created destination directory:', distFirebaseDir);
 }
 
-// Copier les fichiers Firebase compat
+// Copier les fichiers Firebase ESM (non-compat)
 try {
   const firebaseFiles = [
-    { src: firebaseAppCompatPath, dest: path.join(distFirebaseDir, 'firebase-app-compat.js'), name: 'firebase-app-compat.js' },
-    { src: firebaseMessagingCompatPath, dest: path.join(distFirebaseDir, 'firebase-messaging-compat.js'), name: 'firebase-messaging-compat.js' }
+    { src: firebaseAppPath, dest: path.join(distFirebaseDir, 'firebase-app.js'), name: 'firebase-app.js' },
+    { src: firebaseMessagingSwPath, dest: path.join(distFirebaseDir, 'firebase-messaging-sw.js'), name: 'firebase-messaging-sw.js' }
   ];
   
   for (const file of firebaseFiles) {
-    console.log('[POST-BUILD] Copying', file.name, '...');
+    console.log('[POST-BUILD] Copying', file.name, '(ESM module)...');
     fs.copyFileSync(file.src, file.dest);
     
     // Vérifier que le fichier a bien été copié
@@ -185,14 +194,23 @@ try {
       process.exit(1);
     }
     
+    // Vérifier que le fichier est bien un module ES6 (contient export ou import)
+    const content = fs.readFileSync(file.dest, 'utf8');
+    if (file.name.includes('firebase-app.js') && !content.includes('export')) {
+      console.warn('[POST-BUILD] ⚠️ WARNING: firebase-app.js may not be an ES module');
+    }
+    if (file.name.includes('firebase-messaging-sw.js') && !content.includes('export') && !content.includes('import')) {
+      console.warn('[POST-BUILD] ⚠️ WARNING: firebase-messaging-sw.js may not be an ES module');
+    }
+    
     const stats = fs.statSync(file.dest);
     console.log('[POST-BUILD] ✅ Copied', file.name, '-', stats.size, 'bytes');
   }
   
   // Vérification finale: tous les fichiers doivent être présents
   const requiredFiles = [
-    path.join(distFirebaseDir, 'firebase-app-compat.js'),
-    path.join(distFirebaseDir, 'firebase-messaging-compat.js')
+    path.join(distFirebaseDir, 'firebase-app.js'),
+    path.join(distFirebaseDir, 'firebase-messaging-sw.js')
   ];
   
   for (const filePath of requiredFiles) {
@@ -202,16 +220,16 @@ try {
     }
   }
   
-  console.log('[POST-BUILD] ✅ All Firebase files copied successfully');
+  console.log('[POST-BUILD] ✅ All Firebase ESM files copied successfully');
 } catch (error) {
   console.error('[POST-BUILD] ❌ ERROR copying Firebase files:', error.message);
   process.exit(1);
 }
 
 console.log('[POST-BUILD] ===== Service Worker Copy Complete =====');
-console.log('[POST-BUILD] ✅ BUILD SUCCESS: Service worker ready for Vercel deployment');
+console.log('[POST-BUILD] ✅ BUILD SUCCESS: ES module service worker ready for Vercel deployment');
 console.log('[POST-BUILD] ✅ Files in web/dist/:');
-console.log('[POST-BUILD]   - firebase-messaging-sw.js');
-console.log('[POST-BUILD]   - firebase/firebase-app-compat.js');
-console.log('[POST-BUILD]   - firebase/firebase-messaging-compat.js');
+console.log('[POST-BUILD]   - firebase-messaging-sw.js (ES module)');
+console.log('[POST-BUILD]   - firebase/firebase-app.js (ESM)');
+console.log('[POST-BUILD]   - firebase/firebase-messaging-sw.js (ESM)');
 

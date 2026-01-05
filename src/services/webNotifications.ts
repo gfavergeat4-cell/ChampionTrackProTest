@@ -118,9 +118,13 @@ export async function registerWebPushTokenForCurrentUser(): Promise<void> {
     console.log('[WEB PUSH] 🔵 Scope:', '/');
     console.log('[WEB PUSH] 🔵 Calling navigator.serviceWorker.register()...');
     
+    // Enregistrer le service worker comme module ES6
     const registration = await navigator.serviceWorker.register(swPath, {
+      type: 'module',
       scope: '/',
     });
+    
+    console.log('[WEB PUSH] ✅ Service worker registered as ES module');
     
     console.log('[WEB PUSH] ✅✅✅ SERVICE WORKER REGISTERED SUCCESSFULLY ✅✅✅');
     console.log('[WEB PUSH] 🔵 Registration result:', {
